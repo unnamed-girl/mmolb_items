@@ -9,8 +9,18 @@ use mmolb_parsing::{
 #[derive(Debug, Clone)]
 pub struct UnderstoodItem {
     pub effects: Vec<(Attribute, f64)>,
-    pub item: ItemType,
+    pub item: Option<ItemType>,
     pub name: String,
+}
+
+impl Default for UnderstoodItem {
+    fn default() -> Self {
+        Self {
+            effects: Vec::new(),
+            item: None,
+            name: "[Empty Slot]".to_string(),
+        }
+    }
 }
 
 impl TryFrom<PlayerEquipment> for UnderstoodItem {
@@ -46,7 +56,7 @@ impl TryFrom<PlayerEquipment> for UnderstoodItem {
 
             return Ok(UnderstoodItem {
                 effects,
-                item,
+                item: Some(item),
                 name,
             });
         }

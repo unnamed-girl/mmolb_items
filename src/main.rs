@@ -27,6 +27,8 @@ mod item;
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
+    let default_understood_item = UnderstoodItem::default();
+
     let client = Client::default();
 
     let team = fetching::mmolb_fetch::<Team>(&client, &args.team_id)?;
@@ -37,7 +39,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         .flat_map(|a| UnderstoodItem::try_from(a))
         .collect::<Vec<_>>();
 
-    let mut current: HashMap<(ItemType, Slot), (String, UnderstoodItem, f64)> = HashMap::new();
+    let mut current: HashMap<Slot, (String, HashMap<ItemType, (UnderstoodItem, f64)>)> =
+        HashMap::new();
 
     let mut slots = HashSet::new();
 
@@ -46,14 +49,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         let player = fetching::mmolb_fetch::<Player>(&client, &player.player_id)?;
 
         let items: Vec<PlayerEquipment> = player.equipment?.into();
-        for item in items.into_iter().flat_map(UnderstoodItem::try_from) {
-            let rating = analyse(&item, slot);
-            assert!(
-                current
-                    .insert((item.item, slot), (player.first_name.clone(), item, rating))
-                    .is_none()
-            );
+        let mut rated_items = HashMap::new();
+        for item in items {
+            let name = item.name.clone()?;
+            if let Ok(understood) = UnderstoodItem::try_from(item) {
+                let rating = analyse(&understood, slot);
+                rated_items.insert(name, (understood, rating));
+            }
         }
+
+        current.insert(slot, (player.first_name, rated_items));
 
         slots.insert(slot);
     }
@@ -62,11 +67,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     for inventory_item in inventory {
         for slot in &slots {
-            let slot_name = slot.to_string();
-            let (player_name, player_item, player_item_rating) = current
-                .get(&(inventory_item.item, *slot))
-                .map(|(a, b, c)| (a, Some(b), c))
-                .unwrap_or((&slot_name, None, &0.0));
+            let (player_name, items) = current.get(slot).expect("all slots should be filled");
+
+            let (player_item, player_item_rating) = items
+                .get(&inventory_item.item.expect("Inventory items to have a type"))
+                .map(|(a, b)| (a, b))
+                .unwrap_or((&default_understood_item, &0.0));
 
             let inventory_rating = analyse(&inventory_item, *slot);
             if *player_item_rating < inventory_rating {
@@ -75,9 +81,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         "Inventory {} <-> {} {}",
                         inventory_item.name,
                         player_name,
-                        player_item
-                            .map(|p| p.name.as_str())
-                            .unwrap_or("[Empty Slot]")
+                        player_item.name
                     ),
                     inventory_rating - player_item_rating,
                 ));
@@ -85,32 +89,33 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    for ((_, player_slot), (player, player_item, player_item_rating)) in &current {
-        for other_slot in &slots {
-            let slot_name = other_slot.to_string();
-            let (other_player, other_player_item, other_player_rating) = current
-                .get(&(player_item.item, *other_slot))
-                .map(|(a, b, c)| (a, Some(b), c))
-                .unwrap_or((&slot_name, None, &0.0));
+    for (player_slot, (player, player_items)) in &current {
+        for (player_item_type, (player_item, player_item_rating)) in player_items {
+            for other_slot in &slots {
+                let (other_player, other_player_items) = current
+                    .get(other_slot)
+                    .expect("Iterating over slots that exist");
 
-            let diff = (analyse(player_item, *other_slot)
-                + other_player_item
-                    .map(|other_player_item| analyse(other_player_item, *player_slot))
-                    .unwrap_or(0.0))
-                - (player_item_rating + other_player_rating);
-            if diff > 0.0 {
-                transitions.push((
-                    format!(
-                        "{} {} <-> {} {}",
-                        player,
-                        player_item.name,
-                        other_player,
-                        other_player_item
-                            .map(|i| i.name.as_str())
-                            .unwrap_or("[Empty Slot]")
-                    ),
-                    diff,
-                ));
+                let (other_player_item, other_player_rating) = other_player_items
+                    .get(player_item_type)
+                    .map(|(a, b)| (a, b))
+                    .unwrap_or((&default_understood_item, &0.0));
+
+                let diff = (analyse(player_item, *other_slot)
+                    + analyse(other_player_item, *player_slot))
+                    - (player_item_rating + other_player_rating);
+                if diff > 0.0 {
+                    transitions.push((
+                        format!(
+                            "{} {} <-> {} {}",
+                            player,
+                            player_item.name,
+                            other_player,
+                            other_player_item.name
+                        ),
+                        diff,
+                    ));
+                }
             }
         }
     }
@@ -119,7 +124,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     for (name, diff) in transitions {
         if diff > 0.0 {
-            println!("{name}: +{diff}")
+            println!("{name}: +{:.2}", diff * 100.0)
         }
     }
 

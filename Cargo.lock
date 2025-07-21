@@ -930,6 +930,7 @@ dependencies = [
  "mmolb_parsing",
  "reqwest",
  "serde",
+ "strum",
 ]
 
 [[package]]
