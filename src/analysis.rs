@@ -14,6 +14,7 @@ pub fn analyse(item: &UnderstoodItem, slot: Slot) -> f64 {
 
 pub fn slot_multiplier(slot: Slot, attribute: DividedAttribute) -> f64 {
     match (slot, attribute) {
+        //// Universal don't use
         (
             // Batters don't use pitching stats
             Slot::Catcher
@@ -32,6 +33,13 @@ pub fn slot_multiplier(slot: Slot, attribute: DividedAttribute) -> f64 {
             Slot::StartingPitcher(_) | Slot::ReliefPitcher(_) | Slot::Closer,
             DividedAttribute::Batter(_) | DividedAttribute::Baserunning(_),
         ) => 0.0,
+        (
+            // Designated hitters don't defend
+            Slot::DesignatedHitter,
+            DividedAttribute::Defence(_),
+        ) => 0.0,
+
+        //// Types of balls to different positions
         (
             // Pitchers don't field fly balls
             Slot::StartingPitcher(_) | Slot::ReliefPitcher(_) | Slot::Closer,
@@ -65,11 +73,6 @@ pub fn slot_multiplier(slot: Slot, attribute: DividedAttribute) -> f64 {
             Slot::LeftField | Slot::CenterField | Slot::RightField,
             DividedAttribute::Defence(DefenceAttribute::Reaction),
         ) => 0.1,
-        (
-            // Designated hitters don't defend
-            Slot::DesignatedHitter,
-            DividedAttribute::Defence(_),
-        ) => 0.0,
         _ => 1.0,
     }
 }

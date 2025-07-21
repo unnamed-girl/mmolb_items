@@ -1,4 +1,7 @@
-use std::{collections::{HashMap, HashSet}, error::Error};
+use std::{
+    collections::{HashMap, HashSet},
+    error::Error,
+};
 
 use clap::Parser;
 use mmolb_parsing::{
@@ -45,7 +48,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         let items: Vec<PlayerEquipment> = player.equipment?.into();
         for item in items.into_iter().flat_map(UnderstoodItem::try_from) {
             let rating = analyse(&item, slot);
-            assert!(current.insert((item.item, slot), (player.first_name.clone(), item, rating)).is_none());
+            assert!(
+                current
+                    .insert((item.item, slot), (player.first_name.clone(), item, rating))
+                    .is_none()
+            );
         }
 
         slots.insert(slot);
@@ -55,15 +62,22 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     for inventory_item in inventory {
         for slot in &slots {
-            let (player_name, player_item, player_item_rating) =
-                current.get(&(inventory_item.item, *slot)).unwrap();
+            let slot_name = slot.to_string();
+            let (player_name, player_item, player_item_rating) = current
+                .get(&(inventory_item.item, *slot))
+                .map(|(a, b, c)| (a, Some(b), c))
+                .unwrap_or((&slot_name, None, &0.0));
 
             let inventory_rating = analyse(&inventory_item, *slot);
             if *player_item_rating < inventory_rating {
                 transitions.push((
                     format!(
                         "Inventory {} <-> {} {}",
-                        inventory_item.item, player_name, player_item.name
+                        inventory_item.name,
+                        player_name,
+                        player_item
+                            .map(|p| p.name.as_str())
+                            .unwrap_or("[Empty Slot]")
                     ),
                     inventory_rating - player_item_rating,
                 ));
@@ -73,17 +87,27 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     for ((_, player_slot), (player, player_item, player_item_rating)) in &current {
         for other_slot in &slots {
-            let (other_player, other_player_item, other_player_rating) =
-                current.get(&(player_item.item, *other_slot)).unwrap();
+            let slot_name = other_slot.to_string();
+            let (other_player, other_player_item, other_player_rating) = current
+                .get(&(player_item.item, *other_slot))
+                .map(|(a, b, c)| (a, Some(b), c))
+                .unwrap_or((&slot_name, None, &0.0));
 
             let diff = (analyse(player_item, *other_slot)
-                + analyse(other_player_item, *player_slot))
+                + other_player_item
+                    .map(|other_player_item| analyse(other_player_item, *player_slot))
+                    .unwrap_or(0.0))
                 - (player_item_rating + other_player_rating);
             if diff > 0.0 {
                 transitions.push((
                     format!(
                         "{} {} <-> {} {}",
-                        player, player_item.name, other_player, other_player_item.name
+                        player,
+                        player_item.name,
+                        other_player,
+                        other_player_item
+                            .map(|i| i.name.as_str())
+                            .unwrap_or("[Empty Slot]")
                     ),
                     diff,
                 ));
