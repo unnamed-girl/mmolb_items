@@ -2,14 +2,14 @@ use std::iter::once;
 
 use mmolb_parsing::{
     NotRecognized,
-    enums::{Attribute, EquipmentEffectType, ItemPrefix, ItemSuffix, ItemType},
+    enums::{Attribute, EquipmentEffectType, ItemPrefix, ItemSuffix, ItemName},
     player::PlayerEquipment,
 };
 
 #[derive(Debug, Clone)]
 pub struct UnderstoodItem {
     pub effects: Vec<(Attribute, f64)>,
-    pub item: Option<ItemType>,
+    pub item: Option<ItemName>,
     pub name: String,
 }
 
@@ -40,13 +40,13 @@ impl TryFrom<PlayerEquipment> for UnderstoodItem {
             let name = match value.rare_name {
                 Some(rare_name) => format!("{rare_name} {item}"),
                 None => value
-                    .prefixes
+                    .prefixes.unwrap_or_default()
                     .iter()
                     .map(|p| p.as_ref().map(ItemPrefix::to_string).unwrap())
                     .chain(once(item.to_string()))
                     .chain(
                         value
-                            .suffixes
+                            .suffixes.unwrap_or_default()
                             .iter()
                             .map(|s| s.as_ref().map(ItemSuffix::to_string).unwrap()),
                     )

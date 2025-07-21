@@ -5,7 +5,7 @@ use std::{
 
 use clap::Parser;
 use mmolb_parsing::{
-    enums::{ItemType, Slot},
+    enums::{ItemName, Slot},
     player::{Player, PlayerEquipment},
     team::Team,
 };
@@ -17,6 +17,10 @@ use crate::{analysis::analyse, item::UnderstoodItem};
 struct Args {
     /// The id of the team to analyse
     team_id: String,
+
+    /// Print the items providing the highest value per affix
+    #[clap(long, action)]
+    value_per_affix: bool
 }
 
 mod analysis;
@@ -34,12 +38,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     let team = fetching::mmolb_fetch::<Team>(&client, &args.team_id)?;
 
     let inventory = team
-        .inventory
+        .inventory?
         .into_iter()
         .flat_map(|a| UnderstoodItem::try_from(a))
         .collect::<Vec<_>>();
 
-    let mut current: HashMap<Slot, (String, HashMap<ItemType, (UnderstoodItem, f64)>)> =
+    let mut current: HashMap<Slot, (String, HashMap<ItemName, (UnderstoodItem, f64)>)> =
         HashMap::new();
 
     let mut slots = HashSet::new();
@@ -61,6 +65,23 @@ fn main() -> Result<(), Box<dyn Error>> {
         current.insert(slot, (player.first_name, rated_items));
 
         slots.insert(slot);
+    }
+
+    if args.value_per_affix {
+        let mut values = Vec::new();
+        for (player_slot, (player, player_items)) in &current {
+            for (player_item_type, (player_item, player_item_rating)) in player_items {
+                values.push((format!("{player} {}", player_item.name), player_item_rating / player_item.effects.len() as f64));
+            }
+        }
+
+        values.sort_by(|(_, r), (_, r2)| r.total_cmp(r2));
+
+        for (name, value) in values {
+            println!("{name}: {:.2}", value * 100.0)
+        }
+
+        return Ok(());
     }
 
     let mut transitions = Vec::new();
